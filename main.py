@@ -1,73 +1,73 @@
 import os
 from os.path import join, dirname
-import json
-from typing import List
-from datetime import datetime
-from concurrent.futures import ProcessPoolExecutor, wait
-
+import requests
 from dotenv import load_dotenv
-from notion.client import NotionClient
-from notion.collection import NotionDate
-from md2notion.upload import convert, uploadBlock
+from notion_client import Client
 from tqdm import tqdm
 
-from src import parser
-
-
+# 環境変数
 load_dotenv(verbose=True)
 dotenv_path = join(dirname(__file__), '.env')
 load_dotenv(dotenv_path)
 
-NOTION_TOKEN = os.environ.get('NOTION_TOKEN')
-COLLECTION_VIEW_URL = os.environ.get('COLLECTION_VIEW_URL')
-SCRAPBOX_FILE_NAME = os.environ.get('SCRAPBOX_FILE_NAME')
 
-notion_client = NotionClient(token_v2=NOTION_TOKEN)
-collection_view = notion_client.get_collection_view(COLLECTION_VIEW_URL)
+SCRAPBOX_PROJECT = os.environ.get('SCRAPBOX_PROJECT')
+SCRAPBOX_KEY = os.environ.get('SCRAPBOX_KEY')
+NOTION_TOKEN = os.environ["NOTION_TOKEN"]
+NOTION_DATABASE = os.environ["NOTION_DATABASE"]
 
+BASE_URL = "https://scrapbox.io/"
+API_URL = BASE_URL + "api/pages/"
 
-def load_scrapbox_file(filename: str):
-    with open(filename, encoding='utf-8') as f:
-        scrapbox_data = json.load(f)
-    return scrapbox_data['pages']
+limit = 10
 
 
-def parse_scrapbox_lines(lines: List[str]) -> str:
-    #print(lines[0])
-    #markdown_lines = ["# " + lines[0]["text"]]
-    #print(markdown_lines[0])
-    markdown_lines = [parser.scrapbox_to_markdown(line["text"]) for line in lines[1:]]
-    return '\n'.join(markdown_lines)
-
-
-def write_notion(scrapbox_pages):
-    with ProcessPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(upload_markdown_block, scrapbox_page) for scrapbox_page in scrapbox_pages]
-        done, not_done = wait(futures)
-        [future.result() for future in tqdm(futures)]
-
-
-def upload_markdown_block(scrapbox_page):
-    new_page = collection_view.collection.add_row()
-    new_page.title = scrapbox_page['title']
-
-    # プロパティ名は設定されてる値に変更が必要
-    created_date = datetime.fromtimestamp(scrapbox_page['created']).date()
-    new_page.created = NotionDate(created_date)
-
-    markdown_text = parse_scrapbox_lines(scrapbox_page['lines'])
-    notion_block = convert(markdown_text)
-    for blockDescriptor in notion_block:
-        #print(blockDescriptor)
-        uploadBlock(blockDescriptor, new_page, '')
+test_block_url = "https://api.notion.com/v1/blocks/1b8f110831964c94b8f9e98ec02025e4/children"
 
 
 def main():
-    scrapbox_pages = load_scrapbox_file(SCRAPBOX_FILE_NAME)
-    if scrapbox_pages is None or len(scrapbox_pages) == 0:
-        raise Exception('ページが存在しない')
-    write_notion(scrapbox_pages)
+    # get scrapbox data
+    headers = {
+        "Cookie": "connect.sid="+SCRAPBOX_KEY+";"
+    }
+    url = API_URL + SCRAPBOX_PROJECT + "?limit="+str(limit)
+    r = requests.get(url, headers=headers)
+    json_data = r.json()
+    scrap_pages = json_data["pages"]
+    print("Scrapbox Pages:", len(scrap_pages))
+
+    # notion client
+
+    notion = Client(auth=NOTION_TOKEN)
+    notion_pages = notion.databases.query(NOTION_DATABASE)["results"]
+
+    notion_page_dict = {page["properties"]["Title"]
+                        ["title"][0]["text"]["content"]: page["id"]
+                        for page in notion_pages}
+
+    for page in tqdm(scrap_pages):
+        page_title = page["title"]
+        page_url = BASE_URL + SCRAPBOX_PROJECT+"/"+page_title.replace(" ", "_")
+        # Notion : create new page to the database
+        new_page = {
+            "Title": {"title": [{"text": {"content": page_title}}]},
+            "Link": {"type": "url", "url": page_url},
+        }
+
+        if not page_title in notion_page_dict:
+            print("Create Page:", page_title)
+            notion.pages.create(
+                parent={"database_id": NOTION_DATABASE}, properties=new_page)
+        else:
+            print("Update Page Content:", page_title)
+            block_info = notion.blocks.retrieve(notion_page_dict[page_title])
+            block_id = block_info["id"]
+
+            # block = notion.blocks.children.list(block_id)  # append(new_block)
+            # print(block_id)
+            notion.blocks.children.append(block_id, children=new_block)
+            break
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
