@@ -142,3 +142,7 @@ cython_debug/
 
 # 入力データ
 *.json
+
+
+# archived
+archived/

@@ -1,108 +1,30 @@
-from typing import List
-from scrapbox_notation_to_md import scrapbox_to_md
 import os
 from os.path import join, dirname
 from dotenv import load_dotenv
 import requests
-
-
-import json
 from notion_client import Client
+from box_utils import Box
 
 
-def scrapbox_to_blocks(scrapbox: List[str]):
-    blocks = []
-    for box in scrapbox:
-        block = None
-        if "gyazo" in box:
-            url = box.split("[")[1][:-1]+".jpg"  # or png for small image
-            block = image_block(url)
-        elif "youtube" in box or "vimeo" in box:
-            url = box.split("[")[1][:-1]
-            block = video_block(url)
-        else:
+def parse_scrapbox(contents: str):
+    last_head = 0
+    all_boxes = []
+    block = []
+    for idx, content in enumerate(contents):
+        head = len(content) - len(content.lstrip())
+        # head为连续的递增数列为一个区块
+        if head == 0:
+            all_boxes.append(head)
+        elif head > last_head and last_head == 0:
+            block.append(idx)
+        elif head > last_head:
             pass
 
-        if block:
-            blocks.append(block)
+        last_head = head
+    # for box in boxes:
+    #    print(box.ToString())
 
-    return blocks
-
-
-def paragraph_block(text: str, bold: bool, italic: bool, underline: bool, color: str, url: str):
-    pass
-
-
-def bulleted_block():
-    pass
-
-
-def heading_block(level: int, text: str):
-    return {
-        "object": "block",
-        "type": "heading_"+str(level),
-        "heading_"+str(level): {
-            "text": [
-                {
-                    "type": "text",
-                    "text": {"content": text}
-                }
-            ]
-        }}
-
-
-def callout_block(text: str):
-    pass
-
-
-def equation_block(text: str):
-    pass
-
-
-def numbered_block():
-    pass
-
-
-def mention_block():
-    pass
-
-
-def code_block():
-    pass
-
-
-# media
-
-def video_block(url: str):
-    # only youtube and vimeo
-    return {
-        "object": "block",
-        "type": "video",
-        "video": {
-            "caption": [],
-            "type": "external",
-            "external": {
-                "url": url
-            }
-        }
-    }
-
-
-def image_block(url: str):
-    return {
-        "object": "block",
-        "type": "image",
-        "image": {
-            "caption": [],
-            "type": "external",
-            "external": {
-                "url": url
-            }
-        }
-    }
-
-
-# 環境変数
+        # 環境変数
 load_dotenv(verbose=True)
 dotenv_path = join(dirname(__file__), '.env')
 load_dotenv(dotenv_path)
@@ -143,9 +65,9 @@ if __name__ == "__main__":
         page_data = r.json()
         pined = page_data["pin"]
         contents = [line["text"] for line in page_data["lines"][1:]]
-        for content in contents:
-            print(content)
-        # page content to block
-        new_blocks = scrapbox_to_blocks(contents)
+        boxes = parse_scrapbox(contents)
 
-        notion.blocks.children.append(block_id, children=new_blocks)
+        # page content to block
+        #new_blocks = scrapbox_to_blocks(contents)
+
+        #notion.blocks.children.append(block_id, children=new_blocks)
