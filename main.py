@@ -19,7 +19,7 @@ NOTION_DATABASE = os.environ["NOTION_DATABASE"]
 BASE_URL = "https://scrapbox.io/"
 API_URL = BASE_URL + "api/pages/"
 
-limit = 10
+limit = 200
 
 
 test_block_url = "https://api.notion.com/v1/blocks/1b8f110831964c94b8f9e98ec02025e4/children"
@@ -55,7 +55,7 @@ def main():
         }
 
         if not page_title in notion_page_dict:
-            print("Create Page:", page_title)
+            #print("Create Page:", page_title)
             notion.pages.create(
                 parent={"database_id": NOTION_DATABASE}, properties=new_page)
         else:
@@ -65,7 +65,7 @@ def main():
 
             # block = notion.blocks.children.list(block_id)  # append(new_block)
             # print(block_id)
-            notion.blocks.children.append(block_id, children=new_block)
+            #notion.blocks.children.append(block_id, children=new_block)
             break
 
 

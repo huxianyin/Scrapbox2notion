@@ -1,29 +1,108 @@
+from dotenv import load_dotenv
+from os.path import join, dirname
+import os
+from notion_client import Client
 
-def scrapbox_to_blocks(scrapbox):
-    blocks = []
-    for box in scrapbox:
-        block = None
-        if "gyazo" in box:
-            url = box.split("[")[1][:-1]+".jpg"  # or png for small image
-            block = image_block(url)
-        elif "youtube" in box or "vimeo" in box:
-            url = box.split("[")[1][:-1]
-            block = video_block(url)
+
+# 環境変数
+load_dotenv(verbose=True)
+dotenv_path = join(dirname(__file__), '.env')
+load_dotenv(dotenv_path)
+
+NOTION_TOKEN = os.environ["NOTION_TOKEN"]
+notion = Client(auth=NOTION_TOKEN)
+
+
+def create_block(parent_id, content, is_bullet=False):
+    # print(content)
+    if "gyazo" in content:
+        url = content.split("[")[1][:-1]+".png"  # or png for small image
+        block = image_block(url)
+    elif "youtube" in content or "vimeo" in content:
+        url = content.split("[")[1][:-1]
+        block = video_block(url)
+    elif len(content) > 2 and content[0] == ">":
+        block = callout_block(content[2:])
+    elif is_bullet:
+        block = bulleted_block(content.lstrip())
+    else:
+        if "*" in content:
+            bold = True
         else:
-            pass
+            bold = False
+        if "~" in content:
+            color = "orange"
+        else:
+            color = "default"
+        if "/" in content:
+            italic = True
+        else:
+            italic = False
+        if "-" in content:
+            strike = True
+        else:
+            strike = False
+        if len(content) > 3 and content[0] == "[" and content[-1] == "]":
+            content = content[2:-1]
+        block = paragraph_block(content, bold, italic,
+                                strike, False, color, None)
 
-        if block:
-            blocks.append(block)
-
-    return blocks
-
-
-def paragraph_block(text: str, bold: bool, italic: bool, underline: bool, color: str, url: str):
-    pass
+    new_block_id = notion.blocks.children.append(
+        parent_id, children=[block])["results"][-1]["id"]
+    return new_block_id
 
 
-def bulleted_block():
-    pass
+def paragraph_block(text: str,
+                    bold: bool = False, italic: bool = False, strike: bool = False,
+                    underline: bool = False, color: str = "default", url: str = None):
+    return {
+        "object": "block",
+        "type": "paragraph",
+        "paragraph": {
+            "text": [
+                {
+                  "type": "text",
+                    "text": {
+                        "content": text,
+                        "link": url,
+                    },
+                    "annotations": {
+                        "bold": bold,
+                        "italic": italic,
+                        "strikethrough": strike,
+                        "underline": underline,
+                        "code": False,
+                        "color": color
+                    },
+                }
+            ]
+        }
+    }
+
+
+def bulleted_block(text):
+    return {
+        "object": "block",
+        "type": "bulleted_list_item",
+        "bulleted_list_item": {
+            "text": [
+                {
+                  "type": "text",
+                    "text": {
+                        "content": text,
+                    },
+                    "annotations": {
+                        "bold": False,
+                        "italic": False,
+                        "strikethrough": False,
+                        "underline": False,
+                        "code": False,
+                        "color": "default"
+                    },
+                }
+            ]
+        }
+    }
 
 
 def heading_block(level: int, text: str):
@@ -41,14 +120,27 @@ def heading_block(level: int, text: str):
 
 
 def callout_block(text: str):
-    pass
+    return {
+        "object": "block",
+        "type": "callout",
+        "callout": {
+            "text": [
+                {
+                    "type": "text",
+                    "text": {
+                        "content": text,
+                    },
+                }
+            ],
+            "icon": {
+                "type": "emoji",
+                "emoji": "💡"
+            }
+        }
+    }
 
 
 def equation_block(text: str):
-    pass
-
-
-def numbered_block():
     pass
 
 
@@ -89,29 +181,3 @@ def image_block(url: str):
             }
         }
     }
-
-
-class Box:
-    def __init__(self, text: str, level: int) -> None:
-        self.text = text
-        self.children = []
-        self.parent = None
-        self.level = level
-
-    def Add(self, child) -> None:
-        self.children.append(child)
-
-    def SetParent(self, parent):
-        self.parent = parent
-
-    def ToString(self):
-        if len(self.children) == 0:
-            return "{" + self.text + "}"
-        else:
-            string = "{" + self.text
-            for child in self.children:
-                string = string + child.ToString()
-            return string+"}"
-
-    def ToBlock(self):
-        pass
